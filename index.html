@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام البوابات - دخول وخروج</title>
+    <style>
+        body { font-family: 'Arial', sans-serif; background-color: #f4f7f6; padding: 15px; direction: rtl; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: #1a5276; margin-bottom: 20px; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        .section { margin-bottom: 15px; padding: 15px; border: 1px solid #eee; border-radius: 10px; position: relative; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: #2c3e50; }
+        select, input { width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+        .search-results { border: 1px solid #ddd; background: white; position: absolute; width: 95%; z-index: 100; display: none; max-height: 150px; overflow-y: auto; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .result-item { padding: 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; text-align: right; }
+        .result-item:hover { background: #e8f4fd; }
+        
+        .companion-list { margin-top: 10px; padding: 0; list-style: none; }
+        .companion-item { display: flex; justify-content: space-between; align-items: center; background: #e8f4fd; padding: 8px 15px; border-radius: 6px; margin-bottom: 5px; font-size: 15px; color: #2c3e50; }
+        .btn-remove { background: none; border: none; color: #dc3545; cursor: pointer; font-size: 16px; font-weight: bold; }
+
+        .btn-group { display: flex; gap: 10px; margin-top: 10px; }
+        button { border: none; border-radius: 10px; color: white; font-size: 18px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        .btn-in { flex: 1; padding: 15px; background-color: #28a745; }
+        .btn-out { flex: 1; padding: 15px; background-color: #dc3545; }
+        .btn-add { width: 80px; padding: 10px; background-color: #3498db; font-size: 14px; margin-bottom: 10px; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>نظام تسجيل الحركة (دخول / خروج)</h2>
+
+    <div class="section">
+        <label>نوع البوابة:</label>
+        <select id="gateType" onchange="toggleGateFields()">
+            <option value="الداخلية">البوابة الداخلية</option>
+            <option value="الجنوبية">البوابة الجنوبية</option>
+            <option value="الرئيسية">البوابة الرئيسية</option>
+        </select>
+
+        <div id="internalGateSection">
+            <label id="gateNameLabel">اسم البوابة الداخلية:</label>
+            <input type="text" id="internalGateName" placeholder="مثال: بوابة 2">
+        </div>
+
+        <div id="receiverSection">
+            <label>المستلم:</label>
+            <input type="text" id="receiver" value="فهد مرزوق المخلفي" placeholder="اسم المستلم">
+        </div>
+    </div>
+
+    <div class="section">
+        <label>بيانات الشخص:</label>
+        <div style="display: flex; gap: 5px;">
+            <input type="text" id="mainSearch" placeholder="ابحث عن الاسم..." onkeyup="filterNames('main')">
+            <button class="btn-add" onclick="addNewEmployee()">+ جديد</button>
+        </div>
+        <div id="mainResults" class="search-results"></div>
+        <input type="text" id="idField" placeholder="رقم السجل">
+        <input type="text" id="jobField" placeholder="الوظيفة">
+    </div>
+
+    <div class="section">
+        <label>نوع المركبة:</label>
+        <input type="text" id="vehicle" placeholder="نوع المركبة واللوحة">
+    </div>
+
+    <div class="section">
+        <label>يرافقه (اكتب الاسم واضغط Enter للإضافة):</label>
+        <input type="text" id="compSearch" placeholder="اكتب اسم المرافق واضغط Enter..." onkeyup="filterNames('comp')" onkeydown="handleCompEnter(event)">
+        <div id="compResults" class="search-results"></div>
+        
+        <ol id="companionList" class="companion-list"></ol>
+    </div>
+
+    <div class="btn-group">
+        <button class="btn-in" onclick="sendWhatsApp('دخول')">إشعار دخول ✅</button>
+        <button class="btn-out" onclick="sendWhatsApp('خروج')">إشعار خروج 🕒</button>
+    </div>
+</div>
+
+<script>
+    let db = JSON.parse(localStorage.getItem('gateDB')) || [
+        { name: "فهد مرزوق", id: "1022334455", job: "مشرف" },
+        { name: "محمد الحربي", id: "1055667788", job: "فني" }
+    ];
+
+    let companions = [];
+
+    // تعديل الدالة لتشمل البوابة الجنوبية أيضاً وتغير مسمى العنوان تلقائياً
+    function toggleGateFields() {
+        const type = document.getElementById('gateType').value;
+        const internalGateSection = document.getElementById('internalGateSection');
+        const receiverSection = document.getElementById('receiverSection');
+        const gateNameLabel = document.getElementById('gateNameLabel');
+        const internalGateNameInput = document.getElementById('internalGateName');
+
+        if (type === 'الرئيسية') {
+            internalGateSection.className = 'hidden';
+            receiverSection.className = 'hidden';
+        } else {
+            internalGateSection.className = '';
+            receiverSection.className = '';
+            // تغيير النص التوضيحي بناءً على الاختيار ليكون دقيقاً
+            if (type === 'الجنوبية') {
+                gateNameLabel.innerText = "اسم البوابة الجنوبية:";
+                internalGateNameInput.placeholder = "مثال: بوابة جنوبية 1";
+            } else {
+                gateNameLabel.innerText = "اسم البوابة الداخلية:";
+                internalGateNameInput.placeholder = "مثال: بوابة 2";
+            }
+        }
+    }
+    toggleGateFields();
+
+    function addNewEmployee() {
+        const name = document.getElementById('mainSearch').value.trim();
+        const id = document.getElementById('idField').value.trim();
+        const job = document.getElementById('jobField').value.trim();
+        if (!name || !id) return alert("الرجاء إكمال الاسم ورقم السجل لحفظ الإضافة الجديدة");
+        db.push({ name, id, job });
+        localStorage.setItem('gateDB', JSON.stringify(db));
+        alert("تم حفظ الموظف بنجاح");
+    }
+
+    function filterNames(type) {
+        const isMain = (type === 'main');
+        const query = document.getElementById(isMain ? 'mainSearch' : 'compSearch').value.trim();
+        const resDiv = document.getElementById(isMain ? 'mainResults' : 'compResults');
+        resDiv.innerHTML = '';
+        
+        if (query.length > 0) {
+            const matches = db.filter(s => s.name.includes(query));
+            if(matches.length === 0) { resDiv.style.display = 'none'; return; }
+            
+            matches.forEach(s => {
+                const item = document.createElement('div');
+                item.className = 'result-item';
+                item.innerText = `${s.name} (${s.id})`;
+                item.onclick = () => {
+                    if (isMain) {
+                        document.getElementById('mainSearch').value = s.name;
+                        document.getElementById('idField').value = s.id;
+                        document.getElementById('jobField').value = s.job;
+                    } else {
+                        addCompanionToList(s.name);
+                    }
+                    resDiv.style.display = 'none';
+                };
+                resDiv.appendChild(item);
+            });
+            resDiv.style.display = 'block';
+        } else { resDiv.style.display = 'none'; }
+    }
+
+    function handleCompEnter(event) {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            const compInput = document.getElementById('compSearch');
+            const name = compInput.value.trim();
+            if (name) {
+                addCompanionToList(name);
+                document.getElementById('compResults').style.display = 'none';
+            }
+        }
+    }
+
+    function addCompanionToList(name) {
+        if (!companions.includes(name)) {
+            companions.push(name);
+            renderCompanions();
+        }
+        document.getElementById('compSearch').value = '';
+    }
+
+    function renderCompanions() {
+        const listContainer = document.getElementById('companionList');
+        listContainer.innerHTML = '';
+        
+        companions.forEach((c, index) => {
+            const li = document.createElement('li');
+            li.className = 'companion-item';
+            li.innerHTML = `<span>${index + 1}- ${c}</span> <button class="btn-remove" onclick="removeCompanion(${index})">✕</button>`;
+            listContainer.appendChild(li);
+        });
+    }
+
+    function removeCompanion(index) {
+        companions.splice(index, 1);
+        renderCompanions();
+    }
+
+    function sendWhatsApp(status) {
+        const gateType = document.getElementById('gateType').value;
+        const intGateName = document.getElementById('internalGateName').value.trim();
+        const receiver = document.getElementById('receiver').value.trim();
+        const name = document.getElementById('mainSearch').value.trim();
+        const idNum = document.getElementById('idField').value.trim();
+        const job = document.getElementById('jobField').value.trim();
+        const vehicle = document.getElementById('vehicle').value.trim() || "لا يوجد";
+        
+        if(!name) return alert("الرجاء اختيار أو كتابة اسم الشخص أولاً");
+
+        const time = new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+        
+        let compText = "لا يوجد";
+        if (companions.length > 0) {
+            compText = "%0A" + companions.map((c, i) => `  ${i + 1} - ${c}`).join('%0A');
+        }
+
+        // تخصيص الهيدر في الرسالة بناءً على اختيار البوابة
+        let gateHeader = `((البوابة ${gateType}))`;
+        if (gateType === 'الداخلية' && intGateName) gateHeader = `((البوابة الداخلية - ${intGateName}))`;
+        if (gateType === 'الجنوبية' && intGateName) gateHeader = `((البوابة الجنوبية - ${intGateName}))`;
+
+        let msg = `إشعار ${status}%0A${gateHeader}%0A%0A` +
+                  `الاسم / ${name}%0A` +
+                  `رقم السجل / ${idNum}%0A` +
+                  `الوظيفة / ${job}%0A` +
+                  `الوقت / ${time}%0A` +
+                  `نوع المركبه / ${vehicle}%0A` +
+                  `يرافقه / ${compText}%0A%0A` +
+                  `ملاحظه / تم السماح له بالـ (${status})`;
+
+        if (gateType !== 'الرئيسية' && receiver) msg += `%0Aالمستلم / ${receiver}`;
+
+        window.open("https://api.whatsapp.com/send?text=" + msg, '_blank');
+    }
+</script>
+</body>
