@@ -229,5 +229,4 @@
         window.open("https://api.whatsapp.com/send?text=" + msg, '_blank');
     }
 </script>
-
 </body>
